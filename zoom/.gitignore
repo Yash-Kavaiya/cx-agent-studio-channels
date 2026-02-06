@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Credentials
+*.json
+!package.json
+!package-lock.json
+service-account-key.json
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build output
+dist/
+build/
+
+# Coverage
+coverage/
+.nyc_output/

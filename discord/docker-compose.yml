@@ -1,0 +1,66 @@
+# Discord Bot Integration for CX Agent Studio
+# Docker Compose configuration
+
+version: '3.8'
+
+services:
+  discord-ces-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: discord-ces-bot
+    restart: unless-stopped
+
+    # Environment variables
+    environment:
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+      - DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
+      - DISCORD_GUILD_ID=${DISCORD_GUILD_ID:-}
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID}
+      - GCP_REGION=${GCP_REGION:-us}
+      - CES_APP_ID=${CES_APP_ID}
+      - CES_DEPLOYMENT_ID=${CES_DEPLOYMENT_ID:-}
+      - RESPOND_TO_MENTIONS_ONLY=${RESPOND_TO_MENTIONS_ONLY:-false}
+      - USE_BIDI_SESSION=${USE_BIDI_SESSION:-false}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - HEALTH_CHECK_PORT=${HEALTH_CHECK_PORT:-8080}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/service-account-key.json
+      - NODE_ENV=production
+
+    # Mount service account credentials
+    volumes:
+      - ${GOOGLE_APPLICATION_CREDENTIALS:-./service-account-key.json}:/app/credentials/service-account-key.json:ro
+
+    # Expose health check port
+    ports:
+      - "${HEALTH_CHECK_PORT:-8080}:8080"
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8080/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # Logging configuration
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# Network configuration (optional)
+networks:
+  default:
+    name: discord-ces-network

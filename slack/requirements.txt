@@ -1,0 +1,28 @@
+# Slack Bot Integration for CX Agent Studio
+# Python dependencies
+
+# Slack SDK and Bolt Framework
+slack-sdk>=3.27.0
+slack-bolt>=1.18.0
+
+# Google Cloud CX Agent Studio
+google-cloud-ces>=0.1.0
+
+# Google Cloud Authentication
+google-auth>=2.25.0
+google-auth-oauthlib>=1.2.0
+
+# WebSocket support for BidiRunSession
+websocket-client>=1.7.0
+
+# Protocol Buffers
+protobuf>=4.25.0
+
+# Environment variable management
+python-dotenv>=1.0.0
+
+# HTTP requests (backup/utilities)
+requests>=2.31.0
+
+# Web framework for Events API mode (optional)
+flask>=3.0.0

@@ -1,0 +1,24 @@
+# Telegram Bot Integration for CX Agent Studio
+# Python dependencies
+
+# Telegram Bot API
+python-telegram-bot>=20.7
+
+# Google Cloud CX Agent Studio
+google-cloud-ces>=0.1.0
+
+# Google Cloud Authentication
+google-auth>=2.25.0
+google-auth-oauthlib>=1.2.0
+
+# WebSocket support for BidiRunSession
+websocket-client>=1.7.0
+
+# Protocol Buffers
+protobuf>=4.25.0
+
+# Environment variable management
+python-dotenv>=1.0.0
+
+# HTTP requests (backup/utilities)
+requests>=2.31.0
