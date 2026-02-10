@@ -22,13 +22,13 @@ from telegram.ext import (
 )
 
 from config import Config, load_config, setup_logging
-from ces_client import CESClient, BidiSessionClient, create_client, create_bidi_client
+from ces_client import CESClient, create_client, create_bidi_client
 
 # Initialize configuration and logging
 config: Config = None
 logger: logging.Logger = None
 ces_client: CESClient = None
-bidi_client: BidiSessionClient = None
+bidi_client = None
 
 # Session tracking for user sessions
 user_sessions: Dict[int, str] = {}
@@ -173,7 +173,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     try:
         # Call CX Agent Studio API
-        if config.use_bidi_session:
+        if config.use_bidi_session and bidi_client:
             response_text = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: bidi_client.send_message(session_id, user_message),
