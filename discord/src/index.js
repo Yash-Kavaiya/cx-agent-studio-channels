@@ -1,6 +1,7 @@
 /**
  * Discord Bot Integration for CX Agent Studio.
  * Main entry point for the Discord bot application.
+ * Supports both text and voice channel interactions.
  */
 
 const {
@@ -14,16 +15,23 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const { loadConfig, logger } = require('./config');
+const { loadConfig, logger, generateVoiceSessionId } = require('./config');
 const { createClient, createBidiClient } = require('./cesClient');
+const { createTTSClient } = require('./ttsClient');
+const { createSTTClient } = require('./sttClient');
+const voiceManager = require('./voiceManager');
 
 // Global instances
 let config;
 let cesClient;
 let bidiClient;
+let ttsClient;
+let sttClient;
+let discordClient;
 
 /**
  * Initialize the Discord client with required intents.
+ * Includes voice channel intents for voice support.
  * @returns {Client} Discord client instance
  */
 function createDiscordClient() {
@@ -34,6 +42,7 @@ function createDiscordClient() {
       GatewayIntentBits.MessageContent,
       GatewayIntentBits.DirectMessages,
       GatewayIntentBits.GuildMessageTyping,
+      GatewayIntentBits.GuildVoiceStates, // Required for voice channel support
     ],
     partials: [Partials.Channel, Partials.Message],
   });
@@ -92,11 +101,11 @@ function loadEvents(client) {
 
     if (event.once) {
       client.once(event.name, (...args) =>
-        event.execute(...args, { config, cesClient, bidiClient })
+        event.execute(...args, { config, cesClient, bidiClient, voiceManager, ttsClient, sttClient })
       );
     } else {
       client.on(event.name, (...args) =>
-        event.execute(...args, { config, cesClient, bidiClient })
+        event.execute(...args, { config, cesClient, bidiClient, voiceManager, ttsClient, sttClient })
       );
     }
 
@@ -143,6 +152,21 @@ async function main() {
       logger.info('Using runSession for synchronous responses');
     }
 
+    // Initialize TTS and STT clients for voice responses
+    if (config.voice.enabled) {
+      ttsClient = createTTSClient(config);
+      sttClient = createSTTClient(config);
+      logger.info('Voice channel support enabled with TTS and STT');
+      if (config.voice.autoJoin) {
+        logger.info('Auto-join voice channels: enabled');
+      }
+      if (config.voice.autoLeave) {
+        logger.info(`Auto-leave when alone: enabled (delay: ${config.voice.autoLeaveDelay}ms)`);
+      }
+    } else {
+      logger.info('Voice channel support disabled');
+    }
+
     // Start health check server
     startHealthCheckServer(config.server.healthCheckPort);
 
@@ -165,16 +189,30 @@ async function main() {
 // Handle graceful shutdown
 process.on('SIGINT', async () => {
   logger.info('Shutting down...');
+  voiceManager.destroyAllConnections();
   if (cesClient) {
     await cesClient.close();
+  }
+  if (ttsClient) {
+    await ttsClient.close();
+  }
+  if (sttClient) {
+    await sttClient.close();
   }
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
   logger.info('Shutting down...');
+  voiceManager.destroyAllConnections();
   if (cesClient) {
     await cesClient.close();
+  }
+  if (ttsClient) {
+    await ttsClient.close();
+  }
+  if (sttClient) {
+    await sttClient.close();
   }
   process.exit(0);
 });

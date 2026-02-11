@@ -1,6 +1,7 @@
 /**
  * Configuration management for Discord CX Agent Studio Bot.
  * Loads configuration from environment variables with validation.
+ * Supports both text and voice channel interactions.
  */
 
 require('dotenv').config();
@@ -49,6 +50,14 @@ function loadConfig() {
     bot: {
       respondToMentionsOnly: process.env.RESPOND_TO_MENTIONS_ONLY === 'true',
       useBidiSession: process.env.USE_BIDI_SESSION === 'true',
+    },
+
+    // Voice settings
+    voice: {
+      enabled: process.env.VOICE_ENABLED !== 'false', // Enabled by default
+      autoJoin: process.env.VOICE_AUTO_JOIN === 'true', // Auto-join when user joins
+      autoLeave: process.env.VOICE_AUTO_LEAVE !== 'false', // Auto-leave when alone
+      autoLeaveDelay: parseInt(process.env.VOICE_AUTO_LEAVE_DELAY || '30000', 10), // ms
     },
 
     // Server settings
@@ -107,6 +116,34 @@ function generateSessionId(channelId, threadId = null) {
 }
 
 /**
+ * Generate a valid session ID for voice channel interactions.
+ * Uses user ID to maintain per-user conversation context in voice.
+ * @param {string} guildId - Discord guild ID
+ * @param {string} channelId - Voice channel ID
+ * @param {string} userId - User ID
+ * @returns {string} Valid session ID
+ */
+function generateVoiceSessionId(guildId, channelId, userId) {
+  let sessionId = `voice-${guildId}-${channelId}-${userId}`;
+
+  // Ensure first character is alphanumeric
+  if (!/^[a-zA-Z0-9]/.test(sessionId)) {
+    sessionId = 'v' + sessionId;
+  }
+
+  // Remove invalid characters
+  sessionId = sessionId.replace(/[^a-zA-Z0-9\-_]/g, '-');
+
+  // Ensure minimum length of 5
+  if (sessionId.length < 5) {
+    sessionId = sessionId + '-sess';
+  }
+
+  // Max 63 characters
+  return sessionId.substring(0, 63);
+}
+
+/**
  * Simple logger with level support.
  */
 const logger = {
@@ -146,5 +183,6 @@ module.exports = {
   getAppResourceName,
   getSessionName,
   generateSessionId,
+  generateVoiceSessionId,
   logger,
 };

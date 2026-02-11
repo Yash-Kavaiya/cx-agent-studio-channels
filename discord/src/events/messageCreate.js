@@ -142,7 +142,7 @@ module.exports = {
    * @param {Object} context - Context with config and CES clients
    */
   async execute(message, context) {
-    const { config, cesClient, bidiClient } = context;
+    const { config, cesClient, bidiClient, voiceManager, ttsClient } = context;
 
     // Check if we should respond
     if (!shouldRespond(message, message.client, config)) {
@@ -163,6 +163,20 @@ module.exports = {
     // Get session ID
     const threadId = message.channel.isThread() ? message.channel.id : null;
     const sessionId = getSessionId(message.channelId, threadId);
+
+    // Check if user is in a voice channel where bot is connected
+    const guildId = message.guild?.id;
+    let shouldSpeak = false;
+    if (guildId && voiceManager && config.voice.enabled) {
+      const connectionData = voiceManager.getConnection(guildId);
+      if (connectionData) {
+        // Check if the message author is in the same voice channel
+        const member = message.member;
+        if (member?.voice?.channelId === connectionData.channelId) {
+          shouldSpeak = true;
+        }
+      }
+    }
 
     try {
       // Show typing indicator
@@ -187,7 +201,21 @@ module.exports = {
 
       // Send response
       if (responseText) {
+        // Send text response
         await sendLongMessage(message, responseText);
+
+        // If user is in voice channel with bot, also speak the response
+        if (shouldSpeak && ttsClient) {
+          try {
+            logger.info('Converting response to speech for voice channel');
+            const audioBuffer = await ttsClient.synthesize(responseText);
+            await voiceManager.playAudio(guildId, audioBuffer);
+            logger.info('Voice response played successfully');
+          } catch (ttsError) {
+            logger.error('Error playing voice response:', ttsError.message);
+            // Don't fail the whole response if TTS fails
+          }
+        }
       } else {
         await message.reply(
           "I received your message but couldn't generate a response. Please try again."

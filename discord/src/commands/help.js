@@ -35,11 +35,18 @@ module.exports = {
             : 'Send a message in any channel where I am present, or send me a direct message.',
         },
         {
-          name: 'Commands',
+          name: 'Text Commands',
           value: [
             '`/ask [question]` - Ask me a question',
             '`/reset` - Reset your conversation session',
             '`/help` - Show this help message',
+          ].join('\n'),
+        },
+        {
+          name: 'Voice Commands',
+          value: [
+            '`/join [channel]` - Have me join a voice channel',
+            '`/leave` - Have me leave the voice channel',
           ].join('\n'),
         },
         {
@@ -53,6 +60,7 @@ module.exports = {
             '• Be specific with your questions for better answers',
             '• Use threads to keep related conversations organized',
             "• If I seem confused, try resetting the conversation with `/reset`",
+            '• In voice channels, use the text chat to interact with me',
           ].join('\n'),
         }
       )

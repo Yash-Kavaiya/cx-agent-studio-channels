@@ -2,35 +2,43 @@
  * CX Agent Studio (CES) API Client for Node.js.
  * Provides a wrapper for interacting with the CX Agent Studio API,
  * supporting both runSession and BidiRunSession methods.
+ * Uses REST API directly without SDK dependency.
  */
 
-const { SessionServiceClient } = require('@google-cloud/ces').v1;
 const { GoogleAuth } = require('google-auth-library');
 const WebSocket = require('ws');
+const fetch = require('node-fetch');
 const { getSessionName, logger } = require('./config');
 
 /**
- * CES Client for synchronous runSession interactions.
+ * CES Client for synchronous runSession interactions using REST API.
  */
 class CESClient {
+  /**
+   * REST API endpoint template for runSession.
+   */
+  static API_ENDPOINT_TEMPLATE =
+    'https://ces.googleapis.com/v1/{sessionName}:runSession';
+
   /**
    * Initialize the CES client.
    * @param {Object} config - Application configuration
    */
   constructor(config) {
     this.config = config;
-    this._sessionClient = null;
+    this.auth = new GoogleAuth({
+      scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+    });
   }
 
   /**
-   * Get or create a SessionServiceClient instance.
-   * @returns {SessionServiceClient} Session service client
+   * Get Google Cloud authentication token.
+   * @returns {Promise<string>} OAuth2 access token
    */
-  get sessionClient() {
-    if (!this._sessionClient) {
-      this._sessionClient = new SessionServiceClient();
-    }
-    return this._sessionClient;
+  async _getAuthToken() {
+    const client = await this.auth.getClient();
+    const token = await client.getAccessToken();
+    return token.token;
   }
 
   /**
@@ -44,19 +52,46 @@ class CESClient {
     const sessionName = getSessionName(this.config, sessionId);
     logger.debug(`Running session: ${sessionName}`);
 
-    const request = {
-      config: { session: sessionName },
+    const url = CESClient.API_ENDPOINT_TEMPLATE.replace('{sessionName}', sessionName);
+
+    const requestBody = {
       inputs: [{ text: userMessage }],
     };
 
     try {
-      const [response] = await this.sessionClient.runSession(request, {
-        timeout,
-      });
-      logger.debug('Session response received');
+      const token = await this._getAuthToken();
 
-      return this._extractResponseText(response);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'x-goog-request-params': `session=${sessionName}`,
+        },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        logger.error(`API error (${response.status}): ${errorText}`);
+        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      logger.debug('Session response received:', JSON.stringify(data).substring(0, 200));
+
+      return this._extractResponseText(data);
     } catch (error) {
+      if (error.name === 'AbortError') {
+        logger.error('Request timeout');
+        throw new Error('Request timed out');
+      }
       logger.error('Error running session:', error.message);
       throw error;
     }
@@ -88,23 +123,29 @@ class CESClient {
       }
     }
 
+    // Check for agentUtterances (alternative response format)
+    if (response.agentUtterances && response.agentUtterances.length > 0) {
+      for (const utterance of response.agentUtterances) {
+        if (utterance.text) {
+          texts.push(utterance.text);
+        }
+      }
+    }
+
     if (texts.length > 0) {
       return texts.join('\n');
     }
 
     // Fallback: return string representation if no text found
-    logger.warn('No text found in response');
-    return JSON.stringify(response);
+    logger.warn('No text found in response, raw response:', JSON.stringify(response));
+    return 'I received your message but could not generate a proper response.';
   }
 
   /**
-   * Close the client connection.
+   * Close the client connection (no-op for REST client).
    */
   async close() {
-    if (this._sessionClient) {
-      await this._sessionClient.close();
-      this._sessionClient = null;
-    }
+    // No persistent connection to close for REST client
   }
 }
 
@@ -134,8 +175,9 @@ class BidiSessionClient {
    * @returns {Promise<string>} OAuth2 access token
    */
   async _getAuthToken() {
-    const token = await this.auth.getAccessToken();
-    return token;
+    const client = await this.auth.getClient();
+    const token = await client.getAccessToken();
+    return token.token;
   }
 
   /**

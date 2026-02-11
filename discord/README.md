@@ -1,6 +1,6 @@
 # Discord Bot Integration for CX Agent Studio
 
-This integration enables you to deploy your CX Agent Studio agent application as a Discord bot, allowing users to interact with your conversational AI through Discord servers and direct messages.
+This integration enables you to deploy your CX Agent Studio agent application as a Discord bot, allowing users to interact with your conversational AI through Discord servers, direct messages, and voice channels.
 
 ## Table of Contents
 
@@ -15,6 +15,7 @@ This integration enables you to deploy your CX Agent Studio agent application as
   - [5. Deploy the Integration](#5-deploy-the-integration)
 - [Configuration](#configuration)
 - [Features](#features)
+- [Voice Channel Support](#voice-channel-support)
 - [Slash Commands](#slash-commands)
 - [Deployment Options](#deployment-options)
 - [Troubleshooting](#troubleshooting)
@@ -26,10 +27,11 @@ This integration uses the CX Agent Studio API access deployment option to connec
 ### Features
 
 - Real-time message handling via Discord Gateway WebSocket
-- Slash command support (`/ask`, `/reset`, `/help`)
+- Slash command support (`/ask`, `/reset`, `/help`, `/join`, `/leave`)
 - Session management per Discord channel/thread
 - Support for direct messages and server channels
 - Thread-based conversation continuity
+- **Voice channel support** with auto-join and auto-leave
 - Bidirectional streaming support (BidiRunSession)
 - Docker support for easy deployment
 - Health check endpoint for monitoring
@@ -41,15 +43,15 @@ This integration uses the CX Agent Studio API access deployment option to connec
 │   Discord   │────▶│   Discord Bot   │────▶│  CX Agent Studio     │
 │   Server    │◀────│   Integration   │◀────│       API            │
 └─────────────┘     └─────────────────┘     └──────────────────────┘
-                           │
-                    Discord Gateway
-                     (WebSocket)
-                           │
-                           ▼
-                    ┌─────────────────┐
-                    │  Google Cloud   │
-                    │  Authentication │
-                    └─────────────────┘
+      │                    │
+      │             Discord Gateway
+      │              (WebSocket)
+      │                    │
+      ▼                    ▼
+┌─────────────┐     ┌─────────────────┐
+│   Voice     │     │  Google Cloud   │
+│   Channels  │     │  Authentication │
+└─────────────┘     └─────────────────┘
 ```
 
 ## Prerequisites
@@ -100,12 +102,14 @@ This integration uses the CX Agent Studio API access deployment option to connec
    - `Embed Links`
    - `Attach Files`
    - `Add Reactions`
+   - `Connect` (for voice channels)
+   - `Speak` (for voice channels)
 4. Copy the generated URL and open it in a browser
 5. Select a server and authorize the bot
 
 #### Required Permissions Integer
 
-If you need the permissions integer: `277025770560`
+If you need the permissions integer: `3246080`
 
 ### 3. Set Up CX Agent Studio API Access
 
@@ -127,6 +131,11 @@ From the dialog window, note down the **Deployment ID** which contains:
 The format is:
 ```
 projects/PROJECT_ID/locations/REGION_ID/apps/APPLICATION_ID/deployments/DEPLOYMENT_ID
+```
+
+**Example Deployment ID:**
+```
+projects/discord-bot-8fdf5/locations/us/apps/804e6e6c-115e-4da2-bbae-373d79929398/deployments/d3f12f5f-5fe1-4413-9d92-0c009b03db9c
 ```
 
 ### 4. Configure Google Cloud Authentication
@@ -186,9 +195,10 @@ cp .env.example .env
 ```env
 DISCORD_BOT_TOKEN=your_discord_bot_token
 DISCORD_CLIENT_ID=your_application_id
-GCP_PROJECT_ID=your_project_id
+GCP_PROJECT_ID=discord-bot-8fdf5
 GCP_REGION=us
-CES_APP_ID=your_app_id
+CES_APP_ID=804e6e6c-115e-4da2-bbae-373d79929398
+CES_DEPLOYMENT_ID=d3f12f5f-5fe1-4413-9d92-0c009b03db9c
 GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account-key.json
 ```
 
@@ -245,7 +255,7 @@ gcloud run deploy discord-ces-bot \
     --image gcr.io/PROJECT_ID/discord-ces-bot \
     --platform managed \
     --region us-central1 \
-    --set-env-vars="DISCORD_BOT_TOKEN=YOUR_TOKEN,DISCORD_CLIENT_ID=YOUR_ID,GCP_PROJECT_ID=PROJECT_ID,GCP_REGION=us,CES_APP_ID=APP_ID" \
+    --set-env-vars="DISCORD_BOT_TOKEN=YOUR_TOKEN,DISCORD_CLIENT_ID=YOUR_ID,GCP_PROJECT_ID=PROJECT_ID,GCP_REGION=us,CES_APP_ID=APP_ID,CES_DEPLOYMENT_ID=DEPLOYMENT_ID" \
     --allow-unauthenticated
 ```
 
@@ -264,6 +274,10 @@ gcloud run deploy discord-ces-bot \
 | `GOOGLE_APPLICATION_CREDENTIALS` | Yes* | Path to service account key file |
 | `USE_BIDI_SESSION` | No | Use bidirectional streaming (default: `false`) |
 | `RESPOND_TO_MENTIONS_ONLY` | No | Only respond when mentioned (default: `false`) |
+| `VOICE_ENABLED` | No | Enable voice channel support (default: `true`) |
+| `VOICE_AUTO_JOIN` | No | Auto-join voice channels (default: `false`) |
+| `VOICE_AUTO_LEAVE` | No | Auto-leave when alone (default: `true`) |
+| `VOICE_AUTO_LEAVE_DELAY` | No | Delay before auto-leaving in ms (default: `30000`) |
 | `LOG_LEVEL` | No | Logging level (default: `info`) |
 | `HEALTH_CHECK_PORT` | No | Health check endpoint port (default: `8080`) |
 
@@ -276,6 +290,11 @@ Session IDs are automatically generated per Discord channel/thread using the for
 discord-{channel_id}-{thread_id or 'main'}
 ```
 
+For voice channels:
+```
+voice-{guild_id}-{channel_id}-{user_id}
+```
+
 This ensures conversation continuity within each channel/thread while maintaining isolation.
 
 ## Features
@@ -286,6 +305,7 @@ The bot responds to:
 - **Direct Messages**: All DMs with the bot
 - **Channel Mentions**: Messages that @mention the bot
 - **Channel Messages**: All messages in channels (configurable)
+- **Voice Channel Text Chat**: Messages in voice channel text chat
 
 ### Thread Support
 
@@ -301,6 +321,38 @@ The bot shows a typing indicator while processing requests.
 
 Responses are formatted using Discord embeds for better presentation.
 
+## Voice Channel Support
+
+The bot supports Discord voice channels with the following features:
+
+### Voice Commands
+
+| Command | Description |
+|---------|-------------|
+| `/join [channel]` | Join a voice channel (defaults to your current channel) |
+| `/leave` | Leave the current voice channel |
+
+### Auto-Join Feature
+
+When enabled (`VOICE_AUTO_JOIN=true`), the bot will automatically join a voice channel when a user enters it.
+
+### Auto-Leave Feature
+
+When enabled (`VOICE_AUTO_LEAVE=true`, default), the bot will automatically leave a voice channel after a configured delay when it becomes the only member in the channel.
+
+### Voice Channel Text Chat
+
+While in a voice channel, users can interact with the bot using:
+- Text messages in the voice channel's text chat
+- @mentioning the bot in any text channel
+- Using slash commands (`/ask`, `/help`, etc.)
+
+### Voice Channel Permissions
+
+Ensure the bot has these permissions in voice channels:
+- **Connect**: To join voice channels
+- **Speak**: To be present in the channel
+
 ## Slash Commands
 
 | Command | Description |
@@ -308,6 +360,8 @@ Responses are formatted using Discord embeds for better presentation.
 | `/ask [question]` | Ask the AI agent a question |
 | `/reset` | Reset your conversation session |
 | `/help` | Show help information |
+| `/join [channel]` | Join a voice channel |
+| `/leave` | Leave the current voice channel |
 
 ### Registering Commands
 
@@ -369,6 +423,7 @@ ws.on('message', (message) => {
 - **API Version**: 10
 - **Gateway**: WebSocket connection for real-time events
 - **REST API**: For sending messages and managing resources
+- **Voice**: @discordjs/voice for voice channel connections
 
 ## Deployment Options
 
@@ -385,6 +440,7 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.DirectMessages,
+    GatewayIntentBits.GuildVoiceStates, // For voice channel support
   ]
 });
 
@@ -437,6 +493,20 @@ export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account-key.json"
 - Regenerate bot token in Discord Developer Portal
 - Update `DISCORD_BOT_TOKEN` in your `.env` file
 
+#### 6. Bot Cannot Join Voice Channel
+
+**Checks:**
+- Ensure bot has `Connect` and `Speak` permissions
+- Check if voice is enabled (`VOICE_ENABLED=true`)
+- Verify the channel is a voice or stage channel
+
+#### 7. Bot Not Auto-Leaving Voice Channel
+
+**Checks:**
+- Verify `VOICE_AUTO_LEAVE=true`
+- Check `VOICE_AUTO_LEAVE_DELAY` setting
+- Ensure no other users are in the channel
+
 ### Logging
 
 Enable debug logging for troubleshooting:
@@ -463,15 +533,19 @@ discord/
     ├── index.js              # Main entry point
     ├── config.js             # Configuration management
     ├── cesClient.js          # CX Agent Studio API client
+    ├── voiceManager.js       # Voice channel manager
     ├── deploy-commands.js    # Slash command registration
     ├── commands/
     │   ├── ask.js            # /ask command
     │   ├── reset.js          # /reset command
-    │   └── help.js           # /help command
+    │   ├── help.js           # /help command
+    │   ├── join.js           # /join command (voice)
+    │   └── leave.js          # /leave command (voice)
     └── events/
         ├── ready.js          # Bot ready event
         ├── messageCreate.js  # Message handler
-        └── interactionCreate.js  # Slash command handler
+        ├── interactionCreate.js  # Slash command handler
+        └── voiceStateUpdate.js   # Voice state handler
 ```
 
 ## Resources
@@ -479,7 +553,9 @@ discord/
 - [Discord Developer Portal](https://discord.com/developers/applications)
 - [Discord.js Documentation](https://discord.js.org/)
 - [Discord API Documentation](https://discord.com/developers/docs)
+- [Discord.js Voice Documentation](https://discordjs.guide/voice/)
 - [CX Agent Studio Documentation](https://cloud.google.com/customer-engagement-ai/conversational-agents)
+- [CX Agent Studio API Access](https://cloud.google.com/customer-engagement-ai/conversational-agents/docs/deploy/api-access)
 
 ## License
 
